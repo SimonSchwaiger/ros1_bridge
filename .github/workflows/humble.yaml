@@ -1,0 +1,30 @@
+name: Deploy Humble Image to GHCR
+
+on:
+  push:
+    branches: [ "main" ]
+    branches: [ "humble" ]
+  pull_request:
+    branches: [ "humble" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: "Checkout GitHub Action"
+      uses: actions/checkout@v3
+
+    - name: "Login to GitHub Container Registry"
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{github.actor}}
+        password: ${{secrets.GITHUB_TOKEN}}
+    
+    - name: "Build the Docker image"
+      run: |
+        docker build . -f Dockerfile.humble -t ghcr.io/simonschwaiger/ros1_bridge:humble
+        docker push ghcr.io/simonschwaiger/ros1_bridge:humble

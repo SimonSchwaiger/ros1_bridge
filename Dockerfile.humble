@@ -1,0 +1,59 @@
+ARG ROS_DISTRO=humble
+ARG ROS2_WS=/ros2_ws
+
+FROM ros:$ROS_DISTRO-ros-base-jammy
+
+ARG ROS2_WS
+ARG ROS_DISTRO
+ENV ROS_DISTRO $ROS_DISTRO
+ENV ROS2_WS $ROS2_WS
+
+RUN apt-get update && apt-get upgrade -y
+
+## Get rid of ROS2 Repo
+RUN mv /etc/apt/sources.list.d/ros2-latest.list /root/ && apt-get update
+# Resolve catkin conflict and force install correct rospkgs
+RUN sed  -i -e 's|^Conflicts: catkin|#Conflicts: catkin|' /var/lib/dpkg/status
+RUN apt-get install -f
+
+RUN apt-get download python3-catkin-pkg
+RUN apt-get download python3-rospkg
+RUN apt-get download python3-rosdistro
+RUN dpkg --force-overwrite -i python3-catkin-pkg*.deb
+RUN dpkg --force-overwrite -i python3-rospkg*.deb
+RUN dpkg --force-overwrite -i python3-rosdistro*.deb
+RUN apt-get install -f
+
+# Install ROS1 desktop dev
+# This is ros1 for debian packaged for ubuntu22 by Canonical
+# See: https://discourse.ros.org/t/ros-and-ubuntu-22/33729
+RUN apt-get -y install ros-desktop-dev
+
+## Re-add ros2 repos
+RUN mv /root/ros2-latest.list /etc/apt/sources.list.d/ && apt-get update
+
+## The bridge requires RViz, therefore OpenGL is needed
+RUN apt-get install -q -y --no-install-recommends freeglut3-dev
+
+## Attempt build of bridge
+# Newer bridge versions do not work with standard logging enabled. Therefore we roll back: https://github.com/ros2/ros1_bridge/issues/391#issuecomment-1809616610
+RUN mkdir -p $ROS2_WS/src && cd $ROS2_WS/src \
+    && git clone https://github.com/ros2/ros1_bridge.git \
+    && cd ros1_bridge && git checkout b9f1739fd84fc877a8ec6e5c416b65aa2d782f89
+
+RUN /bin/bash -c "source /opt/ros/$ROS_DISTRO/setup.bash \
+    && cd $ROS2_WS \
+    && colcon build --event-handlers console_direct+ --cmake-args -DCMAKE_BUILD_TYPE=Release"
+
+# Add ROS and venv sourcing to bashrc for interactive debugging
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
+RUN echo "source $ROS2_WS/install/local_setup.bash" >> ~/.bashrc
+
+# Add local workspace to entrypoint
+
+# Remove last line from entrypoint, add local workspace sourcing and readd last line
+RUN sed -i '$ d' /ros_entrypoint.sh
+RUN echo "source $ROS2_WS/install/local_setup.bash" >> /ros_entrypoint.sh
+RUN echo 'exec "$@"' >> /ros_entrypoint.sh
+
+CMD ["ros2", "run", "ros1_bridge", "dynamic_bridge"]
