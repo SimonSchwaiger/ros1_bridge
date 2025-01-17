@@ -2,8 +2,7 @@ name: Deploy Humble Image to GHCR
 
 on:
   push:
-    branches: [ "main" ]
-    branches: [ "humble" ]
+    branches: [ "main", "humble" ]
   pull_request:
     branches: [ "humble" ]
 
